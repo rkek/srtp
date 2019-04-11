@@ -112,25 +112,47 @@ func (s *SessionSRTCP) decrypt(buf []byte) error {
 		return err
 	}
 
-	pkt, err := rtcp.Unmarshal(decrypted)
-	if err != nil {
-		return err
-	}
-
-	for _, ssrc := range pkt.DestinationSSRC() {
+	forward := func(ssrc uint32) (closed bool, err error) {
 		r, isNew := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTCP)
 		if r == nil {
-			return nil // Session has been closed
+			return true, nil // Session has been closed
 		} else if isNew {
 			s.session.newStream <- r // Notify AcceptStream
 		}
 
 		readStream, ok := r.(*ReadStreamSRTCP)
 		if !ok {
-			return fmt.Errorf("failed to get/create ReadStreamSRTP")
+			return false, fmt.Errorf("failed to get/create ReadStreamSRTP")
 		}
 
 		_, err = readStream.write(decrypted)
+		if err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	pkt, err := rtcp.Unmarshal(decrypted)
+	if err != nil {
+		return err
+	}
+
+	cpkt := rtcp.CompoundPacket(pkt)
+	ssrc_set := make(map[uint32]bool)
+	if cpkt.Validate() == nil {
+		for _, ssrc := range cpkt.DestinationSSRC() {
+			ssrc_set[ssrc] = true
+		}
+	} else {
+		for _, p := range pkt {
+			for _, ssrc := range p.DestinationSSRC() {
+				ssrc_set[ssrc] = true
+			}
+		}
+	}
+
+	for ssrc, _ := range ssrc_set {
+		_, err = forward(ssrc)
 		if err != nil {
 			return err
 		}
