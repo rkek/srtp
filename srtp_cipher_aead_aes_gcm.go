@@ -61,7 +61,7 @@ func newSrtpCipherAeadAesGcm(masterKey, masterSalt []byte) (*srtpCipherAeadAesGc
 }
 
 func (s *srtpCipherAeadAesGcm) authTagLen() int {
-	return 16
+	return 0
 }
 
 func (s *srtpCipherAeadAesGcm) encryptRTP(dst []byte, header *rtp.Header, payload []byte, roc uint32) (ciphertext []byte, err error) {
